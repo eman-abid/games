@@ -22,6 +22,18 @@
         background: radial-gradient(circle at center, #0a0a2e 0%, #000000 100%);
         border: 3px solid #00d4ff;
         box-shadow: 0 0 30px rgba(0, 212, 255, 0.5);
+        max-width: 100%;
+        height: auto; /* Maintains aspect ratio */
+        touch-action: none; /* Critical: Prevents browser scrolling when touching the canvas */
+      }
+      /* Hide the keyboard instructions on mobile */
+      .controls {
+        display: none;
+      }
+      @media (min-width: 768px) {
+        .controls {
+          display: block;
+        }
       }
 
       .game-container {
@@ -82,6 +94,86 @@
         animation: twinkle 3s infinite;
       }
 
+      /* Add inside <style> */
+      .pause-btn {
+        position: absolute;
+        top: 20px;
+        right: 20px; /* Adjusted to not overlap with powerups, moved powerups down slightly in HTML if needed */
+        z-index: 30;
+        min-width: 100px;
+      }
+
+      /* Adjust Powerup info top position so it doesn't overlap the new button */
+      .powerup-info {
+        top: 60px !important;
+      }
+
+      .pause-screen {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        color: #00d4ff; /* Cyan to match theme */
+        font-size: 48px;
+        text-shadow: 0 0 20px #00d4ff;
+        display: none; /* Hidden by default */
+        z-index: 25;
+        background: rgba(0, 4, 40, 0.9);
+        padding: 40px;
+        border: 2px solid #00d4ff;
+        box-shadow: 0 0 30px rgba(0, 212, 255, 0.3);
+        border-radius: 10px;
+      }
+      /* Mobile Controls Styling */
+      .mobile-controls {
+        position: absolute;
+        bottom: 20px;
+        left: 0;
+        width: 100%;
+        padding: 0 20px;
+        display: flex;
+        justify-content: space-between;
+        pointer-events: none; /* Let clicks pass through the container */
+        z-index: 50;
+      }
+
+      .control-btn {
+        pointer-events: auto; /* Re-enable clicks for buttons */
+        background: rgba(0, 212, 255, 0.2);
+        border: 2px solid #00d4ff;
+        color: #fff;
+        font-size: 24px;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        outline: none;
+        user-select: none; /* Prevent text selection */
+        -webkit-user-select: none;
+        touch-action: manipulation;
+      }
+
+      .control-btn:active {
+        background: rgba(0, 212, 255, 0.5);
+        transform: scale(0.95);
+      }
+
+      .fire-btn {
+        border-color: #ff0040;
+        background: rgba(255, 0, 64, 0.2);
+        width: 70px; /* Slightly larger shoot button */
+        height: 70px;
+      }
+
+      .fire-btn:active {
+        background: rgba(255, 0, 64, 0.5);
+      }
+
+      .move-controls {
+        display: flex;
+        gap: 15px;
+      }
+
       @keyframes twinkle {
         0%,
         100% {
@@ -126,10 +218,30 @@
         <div>← → MOVE</div>
         <div>SPACE SHOOT</div>
       </div>
+      <button class="btn btn-outline-info pause-btn" id="pauseBtn">
+        PAUSE
+      </button>
+
+      <div class="pause-screen" id="pauseScreen">
+        <div class="mb-4">PAUSED</div>
+        <button class="btn btn-primary btn-lg" id="resumeBtn">RESUME</button>
+      </div>
+
+      <div class="mobile-controls d-md-none">
+        <div class="move-controls">
+          <button id="btnLeft" class="control-btn">←</button>
+          <button id="btnRight" class="control-btn">→</button>
+        </div>
+        <div class="action-controls">
+          <button id="btnShoot" class="control-btn fire-btn">●</button>
+        </div>
+      </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
+      let isPaused = false;
       const canvas = document.getElementById("gameCanvas");
       const ctx = canvas.getContext("2d");
 
@@ -209,6 +321,68 @@
           }
         },
       };
+
+      // Add this anywhere in your script
+      function togglePause() {
+        // Prevent pausing if game is over
+        if (!gameRunning) return;
+
+        isPaused = !isPaused;
+
+        if (isPaused) {
+          $("#pauseScreen").fadeIn(200);
+          $("#pauseBtn").text("RESUME");
+          // Optional: Cancel engine sound here if you had one
+        } else {
+          $("#pauseScreen").fadeOut(200);
+          $("#pauseBtn").text("PAUSE");
+        }
+      }
+
+      // jQuery Event Handlers
+      $(document).ready(function () {
+        // Click events
+        $("#pauseBtn, #resumeBtn").on("click", function () {
+          togglePause();
+          // Remove focus so hitting 'Space' afterwards doesn't click the button again
+          $(this).blur();
+        });
+
+        // Keyboard shortcut (P or Escape)
+        $(document).on("keydown", function (e) {
+          if (e.key === "p" || e.key === "P" || e.key === "Escape") {
+            togglePause();
+          }
+        });
+
+        // Mobile Control Logic
+        const handleTouch = (btnId, keyName) => {
+          const btn = $(btnId);
+
+          // When finger touches screen
+          btn.on("touchstart mousedown", function (e) {
+            e.preventDefault(); // Stop browser zooming/scrolling
+            keys[keyName] = true;
+
+            // Special case: "Shoot" needs to fire the function immediately,
+            // similar to the keydown event in your original code
+            if (keyName === " " && gameRunning) {
+              createBullet();
+            }
+          });
+
+          // When finger leaves screen
+          btn.on("touchend mouseup mouseleave", function (e) {
+            e.preventDefault();
+            keys[keyName] = false;
+          });
+        };
+
+        // Initialize controls
+        handleTouch("#btnLeft", "ArrowLeft");
+        handleTouch("#btnRight", "ArrowRight");
+        handleTouch("#btnShoot", " "); // ' ' represents the Spacebar
+      });
 
       // Bullets
       let bullets = [];
@@ -663,13 +837,17 @@
         document.getElementById("lives").textContent = "3";
         document.getElementById("powerupInfo").innerHTML = "";
         document.getElementById("gameOver").style.display = "none";
+        isPaused = false; // Add this line
+        $("#pauseScreen").hide(); // Add this line
+        $("#pauseBtn").text("PAUSE"); // Add this line
       }
 
       // Game loop
       function gameLoop() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        if (gameRunning) {
+        // CHANGE: Added '&& !isPaused' to the condition
+        if (gameRunning && !isPaused) {
           ship.move();
           updateBullets();
           updateAsteroids();
@@ -678,6 +856,7 @@
           checkCollisions();
         }
 
+        // We still draw everything so the screen doesn't go blank while paused
         ship.draw();
         drawBullets();
         drawAsteroids();
@@ -686,7 +865,6 @@
 
         requestAnimationFrame(gameLoop);
       }
-
       // Event listeners
       document.addEventListener("keydown", (e) => {
         keys[e.key] = true;
